@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bootstrap/flutter_bootstrap.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,10 +42,18 @@ class _FormScreenState extends State<FormScreen> {
   List<Map<String, dynamic>> pontos = [];
 
   @override
-  void initState() {
+  Future<void> initState() async {
     super.initState();
-    carregarPontos();
-    obterGeolocalizacao();
+    await obterLocalizacao();
+    await carregarPontos();
+    await requestPermissions();
+  }
+
+  Future<void> requestPermissions() async {
+    var status = await Permission.storage.status;
+    if (!status.isGranted) {
+      await Permission.storage.request();
+    }
   }
 
   Future<void> carregarPontos() async {
@@ -78,7 +87,7 @@ class _FormScreenState extends State<FormScreen> {
       'v3': v3Controller.text,
       'v4': v4Controller.text,
       'v5': v5Controller.text,
-      'observacao': obsController.text,
+      'obs': obsController.text,
       'latitude': latitude,
       'longitude': longitude,
       'fotos': fotos.join(' | '),
@@ -113,14 +122,62 @@ class _FormScreenState extends State<FormScreen> {
     fotos.clear();
   }
 
-  Future<void> obterGeolocalizacao() async {
-    Position position = await Geolocator.getCurrentPosition(
-        // ignore: deprecated_member_use
-        desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      latitude = position.latitude.toString();
-      longitude = position.longitude.toString();
-    });
+  Future<void> obterLocalizacao() async {
+    try {
+      // Verifica se a permissão foi concedida
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          print('Permissão de localização negada.');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Permissão de localização negada')),
+          );
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        print('Permissão de localização permanentemente negada.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Permissão de localização permanentemente negada. Ative manualmente.')),
+        );
+        return;
+      }
+
+      // Verifica se o serviço de localização está ativado
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        print('Serviço de localização está desativado.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Serviço de localização desativado. Ative o GPS.')),
+        );
+        return;
+      }
+
+      // Obtém a posição atual
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+
+      setState(() {
+        latitude = position.latitude.toString();
+        longitude = position.longitude.toString();
+      });
+
+      print('Localização obtida: Lat: $latitude, Long: $longitude');
+    } catch (e) {
+      print('Erro ao obter localização: $e');
+      setState(() {
+        latitude = 'Erro ao obter';
+        longitude = 'Erro ao obter';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao obter localização: $e')),
+      );
+    }
   }
 
   Future<void> capturarFoto() async {

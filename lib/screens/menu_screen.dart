@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'form_screen.dart';
@@ -18,6 +20,7 @@ class _MenuScreenState extends State<MenuScreen> {
   final TextEditingController operadorController = TextEditingController();
   final TextEditingController volumeController =
       TextEditingController(text: '25');
+  List<Map<String, dynamic>> pontos = [];
 
   @override
   void initState() {
@@ -71,63 +74,114 @@ class _MenuScreenState extends State<MenuScreen> {
     setState(() {});
   }
 
+  Future<void> _requestPermissions() async {
+    var status = await Permission.storage.status;
+    if (!status.isGranted) {
+      await Permission.storage.request();
+    }
+  }
+
   Future<void> _exportarCSV(int id) async {
-    final registroSelecionado = registros
-        .firstWhere((registro) => registro['id'] == id, orElse: () => {});
+    await _requestPermissions();
+    try {
+      final registroSelecionado = registros
+          .firstWhere((registro) => registro['id'] == id, orElse: () => {});
 
-    if (registroSelecionado.isNotEmpty) {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      List<String>? pontosSalvos = prefs.getStringList('pontos_$id');
+      if (registroSelecionado.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final String? pontosSalvos = prefs.getString('pontos_$id');
 
-      if (pontosSalvos != null) {
-        List<Map<String, dynamic>> pontos = pontosSalvos
-            .map((ponto) => json.decode(ponto) as Map<String, dynamic>)
-            .toList();
+        if (pontosSalvos != null) {
+          setState(() {
+            pontos = List<Map<String, dynamic>>.from(json.decode(pontosSalvos));
+          });
 
-        StringBuffer csvBuffer = StringBuffer();
-        csvBuffer.writeln(
-            'rodovia,data,pista,sentido,faixa,operador,volume,km,trilha,tipo,tempo,temperatura,d1,d2,d3,d4,v1,v2,v3,v4,v5,obs,latitude,longitude,foto');
+          final List<List<String>> rows = [
+            [
+              'Rodovia',
+              'Data',
+              'Pista',
+              'Sentido',
+              'Faixa',
+              'Operador',
+              'Volume',
+              'KM',
+              'Trilha',
+              'Tipo',
+              'Tempo',
+              'Temperatura',
+              'D1',
+              'D2',
+              'D3',
+              'D4',
+              'V1',
+              'V2',
+              'V3',
+              'V4',
+              'V5',
+              'Obs',
+              'Latitude',
+              'Longitude',
+              'Foto'
+            ],
+          ];
 
-        for (var ponto in pontos) {
-          csvBuffer.writeln([
-            registroSelecionado['rodovia'],
-            ponto['data'],
-            ponto['pista'],
-            ponto['sentido'],
-            ponto['faixa'],
-            registroSelecionado['operador'],
-            registroSelecionado['volume'],
-            ponto['posicao'],
-            ponto['trilha'],
-            ponto['tipo'],
-            ponto['condicao'],
-            ponto['temperatura'],
-            ponto['d1'],
-            ponto['d2'],
-            ponto['d3'],
-            ponto['d4'],
-            ponto['v1'],
-            ponto['v2'],
-            ponto['v3'],
-            ponto['v4'],
-            ponto['v5'],
-            ponto['obs'],
-            ponto['latitude'],
-            ponto['longitude'],
-            ponto['foto']
-          ].join(','));
+          for (var ponto in pontos) {
+            rows.add([
+              registroSelecionado['rodovia'] ?? '',
+              ponto['data'] ?? '',
+              ponto['pista'] ?? '',
+              ponto['sentido'] ?? '',
+              ponto['faixa'] ?? '',
+              registroSelecionado['operador'] ?? '',
+              registroSelecionado['volume'] ?? '',
+              ponto['posicao'] ?? '',
+              ponto['trilha'] ?? '',
+              ponto['tipo'] ?? '',
+              ponto['condicao'] ?? '',
+              ponto['temperatura'] ?? '',
+              ponto['d1'] ?? '',
+              ponto['d2'] ?? '',
+              ponto['d3'] ?? '',
+              ponto['d4'] ?? '',
+              ponto['v1'] ?? '',
+              ponto['v2'] ?? '',
+              ponto['v3'] ?? '',
+              ponto['v4'] ?? '',
+              ponto['v5'] ?? '',
+              ponto['obs'] ?? '',
+              ponto['latitude'] ?? '',
+              ponto['longitude'] ?? '',
+              ponto['fotos'] ?? ''
+            ]);
+          }
+
+          // Converter para CSV
+          final String csvData = const ListToCsvConverter().convert(rows);
+
+          // Obter o diretório de download
+          final Directory directory = Directory('/storage/emulated/0/Download');
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final String filePath = '${directory.path}/$timestamp.csv';
+
+          // Salvar o arquivo
+          final File file = File(filePath);
+          await file.writeAsString(csvData);
+
+          // Exibir sucesso
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Dados exportados com sucesso para $filePath')),
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Arquivo CSV exportado em $filePath')));
         }
-
-        final Directory directory = Directory('/storage/emulated/0/Download');
-        final String uniqueFileName =
-            'dados_${DateTime.now().millisecondsSinceEpoch}.csv';
-        final filePath = '${directory.path}/$uniqueFileName';
-        final file = File(filePath);
-        await file.writeAsString(csvBuffer.toString());
-
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Arquivo CSV exportado em $filePath')));
       }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao exportar dados: $e')),
+      );
     }
   }
 
