@@ -21,6 +21,8 @@ class _MenuScreenState extends State<MenuScreen> {
   final TextEditingController volumeController =
       TextEditingController(text: '25');
   List<Map<String, dynamic>> pontos = [];
+  final int itemsPerPage = 5; // Defina o número de itens por página
+  int currentPage = 0;
 
   @override
   void initState() {
@@ -66,12 +68,32 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Future<void> _excluirRegistro(int id) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    registros.removeWhere((registro) => registro['id'] == id);
-    List<String> registrosJson =
-        registros.map((registro) => json.encode(registro)).toList();
-    await prefs.setStringList('registros', registrosJson);
-    setState(() {});
+    _exportarCSV(id);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Exclusão'),
+        content: const Text('Tem certeza que deseja excluir este registro?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              SharedPreferences prefs = await SharedPreferences.getInstance();
+              registros.removeWhere((registro) => registro['id'] == id);
+              List<String> registrosJson =
+                  registros.map((registro) => json.encode(registro)).toList();
+              await prefs.setStringList('registros', registrosJson);
+              setState(() {});
+              Navigator.pop(context);
+            },
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _requestPermissions() async {
@@ -161,8 +183,9 @@ class _MenuScreenState extends State<MenuScreen> {
 
           // Obter o diretório de download
           final Directory directory = Directory('/storage/emulated/0/Download');
+          final String road = registroSelecionado['rodovia'];
           final timestamp = DateTime.now().millisecondsSinceEpoch;
-          final String filePath = '${directory.path}/$timestamp.csv';
+          final String filePath = '${directory.path}/$road $timestamp.csv';
 
           // Salvar o arquivo
           final File file = File(filePath);
@@ -173,9 +196,6 @@ class _MenuScreenState extends State<MenuScreen> {
             SnackBar(
                 content: Text('Dados exportados com sucesso para $filePath')),
           );
-
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Arquivo CSV exportado em $filePath')));
         }
       }
     } catch (e) {
@@ -187,63 +207,188 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final int totalPages = (registros.length / itemsPerPage).ceil();
+    final int startIndex = currentPage * itemsPerPage;
+    final int endIndex = (startIndex + itemsPerPage) > registros.length
+        ? registros.length
+        : startIndex + itemsPerPage;
+    final List<Map<String, dynamic>> currentPageRecords =
+        registros.sublist(startIndex, endIndex);
     return Scaffold(
-      appBar: AppBar(title: const Text('Menu Principal')),
+      appBar: AppBar(
+        title: const Text('Aderência'),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            TextField(
-                controller: rodoviaController,
-                decoration: const InputDecoration(labelText: 'Rodovia')),
-            TextField(
-                controller: operadorController,
-                decoration: const InputDecoration(labelText: 'Operador')),
-            TextField(
-                controller: volumeController,
-                decoration:
-                    const InputDecoration(labelText: 'Volume de Areia (cm³)')),
-            const SizedBox(height: 16),
-            ElevatedButton(
-                onPressed: _salvarRegistro, child: const Text('Cadastrar')),
-            const SizedBox(height: 16),
-            Expanded(
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('Rodovia')),
-                  DataColumn(label: Text('Data')),
-                  DataColumn(label: Text('Operador')),
-                  DataColumn(label: Text('Ações')),
-                ],
-                rows: registros.map((registro) {
-                  return DataRow(cells: [
-                    DataCell(Text(registro['rodovia'])),
-                    DataCell(Text(registro['data'])),
-                    DataCell(Text(registro['operador'])),
-                    DataCell(Row(
+            // Card de Cadastro
+            Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Cadastrar Registro',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Grid com 3 campos
+                    Row(
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.add),
-                          onPressed: () {
-                            Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        FormScreen(menuId: registro['id'])));
-                          },
+                        Expanded(
+                          child: TextField(
+                            controller: rodoviaController,
+                            decoration: const InputDecoration(
+                              labelText: 'Rodovia',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.download),
-                          onPressed: () => _exportarCSV(registro['id']),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: operadorController,
+                            decoration: const InputDecoration(
+                              labelText: 'Operador',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.delete),
-                          onPressed: () => _excluirRegistro(registro['id']),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: volumeController,
+                            decoration: const InputDecoration(
+                              labelText: 'Volume de Areia (cm³)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
                         ),
                       ],
-                    )),
-                  ]);
-                }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Botão de ação
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        onPressed: _salvarRegistro,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Cadastrar'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 16, horizontal: 24),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Tabela de Registros
+            Expanded(
+              child: Card(
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Registros',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: DataTable(
+                              columns: const [
+                                DataColumn(label: Text('Rodovia')),
+                                DataColumn(label: Text('Ações')),
+                              ],
+                              rows: currentPageRecords.map((registro) {
+                                return DataRow(cells: [
+                                  DataCell(Text(registro['rodovia']!)),
+                                  DataCell(Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.add),
+                                        onPressed: () {
+                                          Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      FormScreen(
+                                                          menuId:
+                                                              registro['id'])));
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.download),
+                                        onPressed: () =>
+                                            _exportarCSV(registro['id']),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete),
+                                        onPressed: () =>
+                                            _excluirRegistro(registro['id']),
+                                      ),
+                                    ],
+                                  )),
+                                ]);
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Paginação
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            onPressed: currentPage > 0
+                                ? () {
+                                    setState(() {
+                                      currentPage--;
+                                    });
+                                  }
+                                : null,
+                          ),
+                          Text('Página ${currentPage + 1} de $totalPages'),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_forward),
+                            onPressed: currentPage < totalPages - 1
+                                ? () {
+                                    setState(() {
+                                      currentPage++;
+                                    });
+                                  }
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bootstrap/flutter_bootstrap.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
@@ -18,11 +19,9 @@ class FormScreen extends StatefulWidget {
 }
 
 class _FormScreenState extends State<FormScreen> {
-  final TextEditingController sentidoController = TextEditingController();
   final TextEditingController pistaController = TextEditingController();
   final TextEditingController faixaController = TextEditingController();
   final TextEditingController posicaoController = TextEditingController();
-  final TextEditingController trilhaController = TextEditingController();
   final TextEditingController tipoController = TextEditingController();
   final TextEditingController condicaoController = TextEditingController();
   final TextEditingController temperaturaController = TextEditingController();
@@ -40,13 +39,36 @@ class _FormScreenState extends State<FormScreen> {
   String longitude = '';
   List<String> fotos = [];
   List<Map<String, dynamic>> pontos = [];
+  final List<String> sentidoOptions = ['Crescente', 'Decrescente'];
+  String? selectedSentido;
+  final List<String> trilhaOptions = ['Interna', 'Externa'];
+  String? selectedtrilha;
+  static const platform = MethodChannel('com.seuapp/temperatura_bateria');
+  double? temperaturaBateria;
 
   @override
-  Future<void> initState() async {
+  void initState() {
     super.initState();
-    await obterLocalizacao();
+    _initScreen();
+  }
+
+  void _initScreen() async {
     await carregarPontos();
     await requestPermissions();
+    await obterLocalizacao();
+    await obterTemperaturaBateria();
+  }
+
+  Future<void> obterTemperaturaBateria() async {
+    try {
+      final double temperatura =
+          await platform.invokeMethod('getBatteryTemperature');
+      setState(() {
+        temperaturaController.text = temperatura.toStringAsFixed(1);
+      });
+    } catch (e) {
+      print("Erro ao obter temperatura : $e");
+    }
   }
 
   Future<void> requestPermissions() async {
@@ -70,11 +92,11 @@ class _FormScreenState extends State<FormScreen> {
     final novoPonto = {
       'menuId': widget.menuId,
       'data': DateTime.now().toString().split('.')[0],
-      'sentido': sentidoController.text,
+      'sentido': selectedSentido,
       'pista': pistaController.text,
       'faixa': faixaController.text,
       'posicao': posicaoController.text,
-      'trilha': trilhaController.text,
+      'trilha': selectedtrilha,
       'tipo': tipoController.text,
       'condicao': condicaoController.text,
       'temperatura': temperaturaController.text,
@@ -101,11 +123,11 @@ class _FormScreenState extends State<FormScreen> {
   }
 
   void limparCampos() {
-    /*sentidoController.clear();
+    /*selectedSentido.clear();
     pistaController.clear();
     faixaController.clear();
     posicaoController.clear();
-    trilhaController.clear();
+    selectedtrilha.clear();
     tipoController.clear();
     condicaoController.clear();
     temperaturaController.clear();*/
@@ -197,8 +219,8 @@ class _FormScreenState extends State<FormScreen> {
       // Usando flutter_image_compress para compactar a imagem
       var result = await FlutterImageCompress.compressWithFile(
         originalImage.absolute.path,
-        minWidth: 800, // Largura mínima (ajuste conforme necessário)
-        minHeight: 600, // Altura mínima (ajuste conforme necessário)
+        minWidth: 1920, // Largura mínima (ajuste conforme necessário)
+        minHeight: 1080, // Altura mínima (ajuste conforme necessário)
         quality: 70, // Qualidade da compressão (ajuste conforme necessário)
         rotate: 0, // Caso queira rodar a imagem
       );
@@ -230,87 +252,351 @@ class _FormScreenState extends State<FormScreen> {
               // Primeira linha de campos
               BootstrapRow(children: [
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Sentido', sentidoController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        labelText: 'Sentido',
+                        border: OutlineInputBorder(),
+                      ),
+                      value: selectedSentido,
+                      items: sentidoOptions.map((String sentido) {
+                        return DropdownMenuItem<String>(
+                          value: sentido,
+                          child: Text(sentido),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          selectedSentido = newValue;
+                        });
+                      },
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Pista', pistaController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: pistaController,
+                      decoration: const InputDecoration(
+                        labelText: 'Pista',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Faixa', faixaController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: faixaController,
+                      decoration: const InputDecoration(
+                        labelText: 'Faixa',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child:
-                        _buildTextField('Posição (km/est)', posicaoController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: posicaoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Posição (km/est)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
               ]),
-
               // Segunda linha de campos
               BootstrapRow(children: [
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Trilha', trilhaController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        labelText: 'Trilha',
+                        border: OutlineInputBorder(),
+                      ),
+                      value: selectedtrilha,
+                      items: trilhaOptions.map((String trilha) {
+                        return DropdownMenuItem<String>(
+                          value: trilha,
+                          child: Text(trilha),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          selectedtrilha = newValue;
+                        });
+                      },
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField(
-                        'Tipo de Revestimento', tipoController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: tipoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de Revestimento',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField(
-                        'Condição de Tempo', condicaoController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: condicaoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Condição de Tempo',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-6 col-md-3',
-                    child:
-                        _buildTextField('Temperatura', temperaturaController)),
+                  sizes: 'col-12 col-sm-6 col-md-3',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: temperaturaController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*[.,]?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Temperatura',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
               ]),
 
               // Terceira linha de campos
-              BootstrapRow(children: [
-                BootstrapCol(
+              BootstrapRow(
+                children: [
+                  BootstrapCol(
                     sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Diâmetro 1', d1Controller)),
-                BootstrapCol(
+                    child: Container(
+                      margin: const EdgeInsets.all(8.0),
+                      child: TextField(
+                        controller: d1Controller,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*[.,]?\d*'),
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Diâmetro 1',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  BootstrapCol(
                     sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Diâmetro 2', d2Controller)),
-                BootstrapCol(
+                    child: Container(
+                      margin: const EdgeInsets.all(8.0),
+                      child: TextField(
+                        controller: d2Controller,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*[.,]?\d*'),
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Diâmetro 2',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  BootstrapCol(
                     sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Diâmetro 3', d3Controller)),
-                BootstrapCol(
+                    child: Container(
+                      margin: const EdgeInsets.all(8.0),
+                      child: TextField(
+                        controller: d3Controller,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*[.,]?\d*'),
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Diâmetro 3',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  BootstrapCol(
                     sizes: 'col-12 col-sm-6 col-md-3',
-                    child: _buildTextField('Diâmetro 4', d4Controller)),
-              ]),
-
+                    child: Container(
+                      margin: const EdgeInsets.all(8.0),
+                      child: TextField(
+                        controller: d4Controller,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*[.,]?\d*'),
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Diâmetro 4',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               // Quarta linha de campos (VRD)
               BootstrapRow(children: [
                 BootstrapCol(
                   sizes: 'col-12 col-sm-2 col-md-1',
                   child: const Text(''),
-                ), // Espaço à esquerda
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-4 col-md-2',
-                    child: _buildTextField('VRD 1', v1Controller)),
+                  sizes: 'col-12 col-sm-4 col-md-2',
+                  child: Container(
+                    margin: const EdgeInsets.all(
+                        8.0), // Margem de 8 pixels em todos os lados
+                    child: TextField(
+                      controller: v1Controller,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*[.,]?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'VRD 1',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-4 col-md-2',
-                    child: _buildTextField('VRD 2', v2Controller)),
+                  sizes: 'col-12 col-sm-4 col-md-2',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: v2Controller,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*[.,]?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'VRD 2',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-4 col-md-2',
-                    child: _buildTextField('VRD 3', v3Controller)),
+                  sizes: 'col-12 col-sm-4 col-md-2',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: v3Controller,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*[.,]?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'VRD 3',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-4 col-md-2',
-                    child: _buildTextField('VRD 4', v4Controller)),
+                  sizes: 'col-12 col-sm-4 col-md-2',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: v4Controller,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*[.,]?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'VRD 4',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
                 BootstrapCol(
-                    sizes: 'col-12 col-sm-4 col-md-2',
-                    child: _buildTextField('VRD 5', v5Controller)),
-                BootstrapCol(
-                  sizes: 'col-12 col-sm-2 col-md-1',
-                  child: const Text(''),
-                ), // Espaço à direita
+                  sizes: 'col-12 col-sm-4 col-md-2',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: v5Controller,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*[.,]?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'VRD 5',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
               ]),
-
               // Campo de observação
               BootstrapRow(children: [
                 BootstrapCol(
-                    sizes: 'col-12 col-md-12',
-                    child: _buildTextField('Observação', obsController)),
+                  sizes: 'col-12',
+                  child: Container(
+                    margin: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: obsController,
+                      decoration: const InputDecoration(
+                        labelText: 'Observação',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
               ]),
 
               // Botões de ação
@@ -323,23 +609,17 @@ class _FormScreenState extends State<FormScreen> {
                   children: [
                     ElevatedButton(
                       onPressed: salvarPonto,
-                      child: const Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Text('Cadastrar')),
+                      child: const Text('Cadastrar'),
                     ),
                     const SizedBox(width: 16), // Espaçamento entre os botões
                     ElevatedButton(
                       onPressed: capturarFoto,
-                      child: const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text('Foto'),
-                      ),
+                      child: const Text('Foto'),
                     ),
                     const SizedBox(width: 16), // Espaçamento entre os botões
                     ElevatedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Padding(
-                          padding: EdgeInsets.all(16.0), child: Text('Voltar')),
+                      child: const Text('Voltar'),
                     ),
                   ],
                 ),
@@ -354,10 +634,41 @@ class _FormScreenState extends State<FormScreen> {
                 itemCount: pontos.length,
                 itemBuilder: (context, index) {
                   final ponto = pontos[index];
+                  final d = ((double.tryParse(
+                                  ponto['d1']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['d2']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['d3']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['d4']?.replaceAll(',', '.') ?? '0') ??
+                              0)) /
+                      4;
+
+                  final v = ((double.tryParse(
+                                  ponto['f1']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['f2']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['f3']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['f4']?.replaceAll(',', '.') ?? '0') ??
+                              0) +
+                          (double.tryParse(
+                                  ponto['f5']?.replaceAll(',', '.') ?? '0') ??
+                              0)) /
+                      5;
+
                   return ListTile(
-                    title: Text('Sentido: ${ponto['sentido']}'),
+                    title: Text('Sentido: ${ponto['sentido'] ?? ''}'),
                     subtitle: Text(
-                        'Posição: ${ponto['posicao']} | Coordenadas: ${ponto['latitude']} ${ponto['longitude']}'),
+                        'Posição: ${ponto['posicao'].replaceAll(',', '.')} | Ø: ${d.toStringAsFixed(2)} | VRD: ${v.toStringAsFixed(2)}'),
                   );
                 },
               ),
@@ -365,19 +676,6 @@ class _FormScreenState extends State<FormScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildTextField(String label, TextEditingController controller) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(labelText: label),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'Campo obrigatório';
-        }
-        return null;
-      },
     );
   }
 }
